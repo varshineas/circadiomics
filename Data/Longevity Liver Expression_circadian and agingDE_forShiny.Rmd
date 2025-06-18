@@ -1,0 +1,426 @@
+---
+title: "Srebp targets expression -liver -circadian & agingDE"
+author: "VAR"
+date: "3/21/2022, updated June 9, 2025"
+output: html_document
+---
+
+
+```{R - Call Libraries}
+# When  > library("BiocStyle") gives you the error message: 
+#       Error in library("BiocStyle") : there is no package called ‘BiocStyle’
+# Try   > BiocManager::install("LibraryToInstall")
+
+
+library(knitr)
+
+# ~~~ Data format
+library(dplyr)
+library(tidyr)
+library(tidyverse) # to clean up data, https://tidyr.tidyverse.org/, gather() and spread()
+library(stringr) #split columns based on string
+
+# ~~~ Plotting
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(ggplot2)
+library(ggforce) #extension package for ggplot2
+#library(Rmisc)
+
+```
+
+
+
+```{R -Type genes to plot}
+
+ #clock genes 
+new_genes <- c("Arntl", "Clock", "Per1", "Per2", "Per3", "Cry1", "Cry2", "Nr1d1", "Nr1d2", "Dbp", "Nfil3", "Rora", "Ppara", "Ppard", "Pparg", "Ppargc1a", "Ppargc1b")
+        
+       
+outname <- "Clock Genes"       
+    
+```
+
+
+
+```{R -Select genes to plot}
+# ~~~ 1. Load genes to test (and check the mouse gene symbol) -senescence ####
+mygenes <-  new_genes
+length(mygenes)
+          
+          
+          # Load protein_coding (m14) 
+          setwd("~/Desktop/Science/16. Longevity genes circadian liver/Liver_suppl tables Science 2022")
+          protein_coding <- as_tibble(read.delim("GeneInfo_ProteinCoding.txt", header = TRUE, sep="\t"))
+          
+          
+          # Genes to test that are not included in our protein_coding_gene list (m14) -or whether GeneSymbol needs to be updated to mice
+          df_master <- protein_coding
+          df_missing <- mygenes[which(!(df_master$GeneSymbol %in% mygenes))]
+          unique(df_missing)
+          dim(df_missing)[1] #
+          
+          
+          # filter mygenes
+          df_master <- protein_coding
+          df_sh <- df_master %>% filter(GeneSymbol %in% mygenes) 
+          dim(df_sh) #[1] 17  9
+
+
+```
+
+```{R -Load & plot DGE results (science paper) -wide table -DESeq Log2FC ( 13997 genes, 3 cnts in at least 24 of 288 samples) -aging -liver}          
+# ~~~ 2. Load DGE results (science paper) -wide table -DESeq -aging -liver ####
+            # Aging differential expression results for each feeding condition (DESeq2, aged/young)					
+            # Genes are considered differentially expressed if padj < 0.05 and FoldChange >= 1.5					
+            # 					
+            # Feeding        total number of genes	Group name explanation			
+            # AL	        2,599 	Genes whose expression is differentially expressed between young and old mice under AL (up or downregulated)			
+            # CR-spread	    1,393 	Genes whose expression is differentially expressed between young and old mice under CR-spread (up or downregulated)			
+            # CR-day-12h	1,095 	Genes whose expression is differentially expressed between young and old mice under CR-day-12h (up or downregulated)			
+            # CR-day-2h	    1,468 	Genes whose expression is differentially expressed between young and old mice under CR-day-2h (up or downregulated)			
+            # CR-night-12h	1,186 	Genes whose expression is differentially expressed between young and old mice under CR-night-12h (up or downregulated)			
+            # CR-night-2h	  669 	Genes whose expression is differentially expressed between young and old mice under CR-night-2h (up or downregulated)			
+    
+
+          setwd("~/Desktop/Science/16. Longevity genes circadian liver/Liver_suppl tables Science 2022")
+          dge_res <- as_tibble(read.delim("Master_AgingDE.txt", header = TRUE, sep="\t"))
+          dim(dge_res) #[1] 13997    29
+          
+          # Filter mygenes ####
+              df_master <- dge_res
+              df_sh <- df_master %>% filter(GeneSymbol %in% mygenes) 
+              dim(df_sh) #[1] 17 29
+              df_missing <- df_sh %>% filter(!(GeneSymbol %in% df_master$GeneSymbol))
+              unique(df_missing$GeneSymbol) 
+              # The 1 following gene is not expressed in the liver, according to our criteria (at least 24 of 288 samples with 3 rawcounts)
+              # [1] G6pd2     
+       
+          # Save table with DE results -wide table ####
+              res.wd <- paste0("~/Desktop/Science/16. Longevity genes circadian liver/plot genes") 
+              setwd(res.wd)
+              my_outfile <-  paste0("Res DGE wide_", dim(df_sh)[1], outname)
+              write.csv(df_sh, paste0(my_outfile,  ".csv"), row.names = F)
+          
+          
+          # Tidy data to plot Log2FC (old/young) for all 6 feeding conditions ####
+              data <- df_sh
+              cols_to_gather <- grep(pattern = "log2FoldChange", colnames(data)) #Select LFC columns
+              gathered_df <-gather(data, colnames(data)[cols_to_gather], #Select LFC columns
+                                   key = "Condition", value = "LFC")
+              gathered_df <- gathered_df[, c(1, 21:25)] 
+              gathered_df$Condition <- gsub("log2FoldChange.1",  "CR.spread", gathered_df$Condition)
+              gathered_df$Condition <- gsub("log2FoldChange.2",  "CR.day.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("log2FoldChange.3",  "CR.day.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("log2FoldChange.4",  "CR.night.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("log2FoldChange.5",  "CR.night.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("log2FoldChange",  "AL", gathered_df$Condition)
+              gathered_df_LFC <- gathered_df
+              unique(gathered_df$Condition)
+              
+              cols_to_gather <- grep(pattern = "lfcSE", colnames(data)) #Select lfcSE columns
+              gathered_df <-gather(data, colnames(data)[cols_to_gather], #Select lfcSE columns
+                                   key = "Condition", value = "LFC_SE")
+              gathered_df <- gathered_df[, c(1, 21:25)] 
+              gathered_df$Condition <- gsub("lfcSE.1",  "CR.spread", gathered_df$Condition)
+              gathered_df$Condition <- gsub("lfcSE.2",  "CR.day.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("lfcSE.3",  "CR.day.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("lfcSE.4",  "CR.night.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("lfcSE.5",  "CR.night.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("lfcSE",  "AL", gathered_df$Condition)
+              gathered_df_LFCSE <- gathered_df
+              unique(gathered_df$Condition)
+              
+              cols_to_gather <- grep(pattern = "padj", colnames(data)) #Select padj columns
+              gathered_df <-gather(data, colnames(data)[cols_to_gather], #Select pval columns
+                                   key = "Condition", value = "pval")
+              gathered_df <- gathered_df[, c(1, 21:25)] 
+              gathered_df$Condition <- gsub("padj.1",  "CR.spread", gathered_df$Condition)
+              gathered_df$Condition <- gsub("padj.2",  "CR.day.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("padj.3",  "CR.day.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("padj.4",  "CR.night.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("padj.5",  "CR.night.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("padj",  "AL", gathered_df$Condition)
+              gathered_df_pval <- gathered_df
+              unique(gathered_df$Condition)
+              
+              
+              cols_to_gather <- grep(pattern = "Differentially.expressed", colnames(data)) #Select Differentially.expressed columns
+              gathered_df <-gather(data, colnames(data)[cols_to_gather], #Select Differentially.expressed columns
+                                   key = "Condition", value = "Differentially.expressed")
+              gathered_df <- gathered_df[, c(1, 21:25)] 
+              gathered_df$Condition <- gsub("Differentially.expressed..1",  "CR.spread", gathered_df$Condition)
+              gathered_df$Condition <- gsub("Differentially.expressed..2",  "CR.day.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("Differentially.expressed..3",  "CR.day.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("Differentially.expressed..4",  "CR.night.12h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("Differentially.expressed..5",  "CR.night.2h", gathered_df$Condition)
+              gathered_df$Condition <- gsub("Differentially.expressed.",  "AL", gathered_df$Condition)
+              #unique(gathered_df$Condition)
+              gathered_df_DEres <- gathered_df 
+              
+              gathered_df1 <- full_join(gathered_df_LFC, gathered_df_LFCSE)
+              gathered_df1 <- full_join(gathered_df1, gathered_df_pval)
+              gathered_df <- full_join(gathered_df1, gathered_df_DEres)
+              unique(gathered_df$Condition)
+              gathered_df$Condition <- factor(gathered_df$Condition, levels =c("AL", "CR.spread", "CR.day.12h", "CR.day.2h",  "CR.night.12h", "CR.night.2h"))
+              factor(gathered_df$Condition)
+              gathered_df_saved <- gathered_df
+              
+              
+        # Save table with DE results -long table ####
+              dge_res_long <- gathered_df_saved
+              res.wd <- paste0("~/Desktop/Science/16. Longevity genes circadian liver/plot genes") 
+              setwd(res.wd)
+              my_outfile <-  paste0("Res DGE long_", dim( dge_res_long)[1]/length(unique(dge_res_long$Condition)), " genes")
+              write.csv( dge_res_long, paste0(my_outfile,  ".csv"), row.names = F)
+            
+        # Log2FC (old/young) Dotplot ####
+            
+            # Select genes to plot (mygenes1)
+                # ~~~~ all genes
+                mygenes1 <- unique(gathered_df_saved$GeneSymbol)
+                my_outfile <- paste0("Log2FC_ ", outname, "_ ", length(mygenes1))
+                
+              
+                
+          # Plot mygenes1
+              gathered_df <- gathered_df_saved %>% filter(GeneSymbol%in% mygenes1)
+              mylevels_col <- c("#474747", "#8000FF", "#FF8F66", "#FFCC66",  "#00C180", "#00CFCF")
+              n_pages <- ceiling(length(unique(gathered_df$GeneSymbol))/ 20) 
+              plot.wd <- paste0("~/Desktop/Science/16. Longevity genes circadian liver/plot genes/") 
+              my_pdf_filename <- paste0(my_outfile, ".pdf") #my_pdf_filename <- paste0(my_outfile, " _SenescenceGenes_Log2FC.pdf")
+              
+              pdf(paste0(plot.wd, "/",  my_pdf_filename), height = 8, width = 12)
+              
+              for (i in seq_len(n_pages)) {
+                    my_plot <- ggplot(gathered_df , aes(x = Condition, y = LFC)) +
+                                  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = -log2(1.5), ymax = log2(1.5)),
+                                            alpha = 1/5,
+                                            fill = "Lightgrey") +
+                                  geom_errorbar(aes(ymin=LFC- LFC_SE, ymax= LFC + LFC_SE), width=.1) +
+                                  geom_point(aes(x = Condition, y = LFC, color = Condition), 
+                                             alpha=1, size=3 ) + 
+                                  #geom_text(hjust=0, vjust=0) + #
+                                  geom_text(aes(label = Differentially.expressed), size = 3, hjust=0.5, vjust=0.5) + #  add label text with UP/DOWN/NS
+                                  geom_text(aes(label = round(pval, digits = 4)), size = 2, hjust=0.5, vjust=3) + #  add label text with pval
+                                  
+                                  xlab("Condition") +
+                                  ylab("Log2FC") + 
+                                  
+                                  labs(title = paste0(my_pdf_filename)) + 
+                                  facet_wrap_paginate(~GeneSymbol, scales = "free_y", page = i, ncol = 3, nrow = 4) +
+                                  #facet_wrap_paginate(~GeneSymbol, scales = "free_y", page = i, ncol = 1, nrow = 1) +
+                                  scale_color_manual(values=rep(mylevels_col))+
+                                  theme_bw() +
+                                  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+                                        plot.title = element_text(hjust = 0.5, size=15),
+                                        strip.text = element_text(size = 10))
+                    print(my_plot)
+              }
+              dev.off()
+          
+          
+
+```
+
+```{R -Load & plot Circadian results (science paper) -long table -ARS&JTK&RAIN -aging -liver}                 
+# ~~~ 3. Load Circadian results (science paper) -long table -ARS&JTK&RAIN -aging -liver ####
+    	
+          setwd("~/Desktop/Science/16. Longevity genes circadian liver/Liver_suppl tables Science 2022/")
+          cyc_res <- as_tibble(read.delim("Master_Circadian.txt", header = TRUE, sep="\t"))
+          dim(cyc_res) #[1] 122976     16 #where 22976 / 12 groups = 10248 = which is the number of expressed genes (13997) with rpkm_average >= 0.5 that went for cycling analysis.
+
+          # Add columns w/ Feeding & age & number of circadian algorithms with q-val < 0.05
+          cyc_res$Age <- paste0((str_split_fixed(cyc_res$Group, "_", 2))[,1])
+          cyc_res$Feeding <- paste0((str_split_fixed(cyc_res$Group, "_", 2))[,2])
+          cyc_res <- cyc_res %>% 
+                     mutate(Algo_N = ifelse(ARS_BH.Q > 0.05, 0, 1) +
+                                     ifelse(JTK_BH.Q > 0.05, 0, 1) +
+                                     ifelse(Rain_ABH.Q > 0.05, 0, 1)) 
+          
+          # Filter mygenes from cycling results table ####
+          df_master <- cyc_res
+          df_sh <- df_master %>% filter(GeneSymbol %in% mygenes) 
+          dim(df_sh)[1]/12 #[1] 27
+          df_missing <- df_sh %>% filter(!(GeneSymbol %in% df_master$GeneSymbol))
+          unique(df_missing$GeneSymbol) 
+          # The 3 following genes are not expressed in the liver, according to our criteria (at least 24 of 288 samples with 3 rawcounts) & RPKM_AVERAGE >= 0.5
+          #[1] factor(0)
+          
+          
+          
+          # Save table with CIRCADIAN results ####
+          res.wd <- paste0("~/Desktop/Science/16. Longevity genes circadian liver/plot genes/") 
+          setwd(res.wd)
+          my_outfile <-  paste0("Res CIRCADIAN_", dim(df_sh)[1]/12, " - ", outname)
+          write.csv(df_sh, paste0(my_outfile,  ".csv"), row.names = F)
+```          
+
+          
+```{R -Load & plot RPKM by timepoints (science paper) -long table -RPKM (21869 all protein coding genes) -aging -liver }            
+# ~~~ 4. Load RPKM (science paper) -individual files per group -ARS&JTK&RAIN -aging -liver ####
+    	
+          # Load RPKM & Filter mygenes from cycling results table ####
+          setwd("~/Desktop/Science/16. Longevity genes circadian liver/Liver_suppl tables Science 2022/")
+          myfiles <- dir()[grep("RPKM_Males_Liver_", dir())]
+          
+          rpkm_all <- data.frame()
+          for(i in 1:length(myfiles)){
+              rpkm <- as_tibble(read.delim(myfiles[i], header = TRUE, sep="\t"))
+              rpkm$Group <- myfiles[i]
+              rpkm_all <- rbind(rpkm_all, rpkm)
+          }
+          
+          dim(rpkm_all)[1]/length(unique(rpkm_all$Group)) #[1] 21869 all protein coding genes
+          rpkm_all$Group <- gsub("RPKM_Males_Liver_", "", rpkm_all$Group)
+          rpkm_all$Group <- gsub(".txt", "", rpkm_all$Group)
+          rpkm_all$Group<- gsub("-",  ".", rpkm_all$Group)
+          rpkm_all$EnsID <- paste0((str_split_fixed(rpkm_all$GeneID, "_", 2))[,1])
+          rpkm_all$GeneSymbol <- paste0((str_split_fixed(rpkm_all$GeneID, "_", 2))[,2])
+          
+          
+          # Filter mygenes from cycling results table ####
+          df_master <- rpkm_all
+          df_sh <- df_master %>% filter(GeneSymbol %in% mygenes) 
+          dim(df_sh)[1]/length(unique(df_sh$Group)) #[1] 30
+          df_missing <- df_sh %>% filter(!(GeneSymbol %in% df_master$GeneSymbol))
+          unique(df_missing$GeneSymbol) 
+          # All genes of interest are included in the RPKM for protein coding 
+          
+          
+          # Save table with CIRCADIAN results ####
+          res.wd <- paste0("~/Desktop/Science/16. Longevity genes circadian liver/plot genes/") 
+          setwd(res.wd)
+          my_outfile <-  paste0("Res RPKM_ ", dim(df_sh)[1]/12, " - ", outname)
+          write.csv(df_sh, paste0(my_outfile,  ".csv"), row.names = F)
+          
+          
+          # Tidy data to plot circadian RPKM for all 6 feeding conditions ####
+          data <- df_sh
+          cols_to_gather <- grep(pattern = "X", colnames(data)) #Select TP columns -24 columns
+          gathered_df <-gather(data, colnames(data)[cols_to_gather], #Select TP columns -24 columns
+                               key = "Timepoint", value = "RPKM")
+          #gathered_df <- gathered_df[, c(1, 21:25)] 
+          gathered_df$Timepoint <- gsub("X",  "", gathered_df$Timepoint)
+          gathered_df$Timepoint <- gsub("A",  "", gathered_df$Timepoint)
+          gathered_df$Timepoint <- gsub("B",  "", gathered_df$Timepoint)
+          gathered_df$Timepoint <- as.numeric(gathered_df$Timepoint)
+          
+          unique(gathered_df$Group)
+          gathered_df$Age <- paste0((str_split_fixed(gathered_df$Group, "_", 2))[,1])
+          gathered_df$Feeding <- paste0((str_split_fixed(gathered_df$Group, "_", 2))[,2])
+          gathered_df <- gathered_df %>%
+                         group_by(Group, GeneID, Timepoint) %>%
+                         mutate(mean=mean(RPKM))
+          
+          gathered_df_saved <- gathered_df
+          
+          
+          # Select RPKM for mygenes1 ####
+            
+            # Select genes to plot (mygenes1)
+                # ~~~~ all genes
+                mygenes1 <- unique(gathered_df_saved$GeneSymbol)
+                my_outfile <- paste0("all genes_", length(mygenes1))
+
+              
+                # ~~~ Circadian 3/3 in at least one condition 
+                # Algo_Npass <- 3
+                # mygenes1 <-  cyc_res %>% filter(Algo_N >= Algo_Npass) %>% filter(GeneSymbol %in% unique(gathered_df_saved$GeneSymbol))
+                # mygenes1 <- unique(mygenes1$GeneSymbol)
+                # mygenes1
+                # my_outfile <- paste0("Cycling ", Algo_Npass,  "of3 in at least one condition_", length(mygenes1))
+
+                # ~~~ Circadian 2/3 in at least one condition -TEST
+                # Algo_Npass <- 2
+                # mygenes1 <-  cyc_res %>% filter(Algo_N >= Algo_Npass) %>% filter(GeneSymbol %in% unique(gathered_df_saved$GeneSymbol))
+                # mygenes1 <- unique(mygenes1$GeneSymbol)
+                # mygenes1
+                # my_outfile <- paste0("Cycling ", Algo_Npass,  "of3 in at least one condition_", length(mygenes1))
+                 
+                # ~~~ Circadian 1/3 in at least one condition -TEST
+                # Algo_Npass <- 1
+                # mygenes1 <-  cyc_res %>% filter(Algo_N >= Algo_Npass) %>% filter(GeneSymbol %in% unique(gathered_df_saved$GeneSymbol))
+                # mygenes1 <- unique(mygenes1$GeneSymbol)
+                # mygenes1
+                # my_outfile <- paste0("Cycling ", Algo_Npass,  "of3 in at least one condition_", length(mygenes1))
+
+                
+          # Plot circadian expression RPKM ####
+                  gathered_df <- gathered_df_saved %>% filter(GeneSymbol%in% mygenes1)
+                  gathered_df$Feeding <- factor(gathered_df$Feeding, levels =c("AL", "CR.spread", "CR.day.12h", "CR.day.2h",  "CR.night.12h", "CR.night.2h"))
+                  mylevels_col <- c("#474747", "#8000FF", "#FF8F66", "#FFCC66",  "#00C180", "#00CFCF")
+                  n_pages <- ceiling(length(unique(gathered_df$GeneSymbol))/ 6) 
+                  plot.wd <- paste0("~/Desktop/Science/16. Longevity genes circadian liver/plot genes/") 
+                  my_pdf_filename <- paste0("RPKM with DGE and CYC res_ ", outname, my_outfile, ".pdf") 
+          
+          
+            # annotation table with number of circadian algorithms with q-val < 0.05
+                
+                # annotation for circadian results
+                lab_xy <- cyc_res %>% 
+                            group_by(GeneID) %>% 
+                            mutate(max_y = max(max_mean, na.rm = T))
+                
+                anno_y <- lab_xy %>% 
+                            filter(Age == "06mo") %>% 
+                            mutate(lab = paste0(Age, ": " ,Algo_N, " /3"), xlab=25) %>% 
+                            filter(GeneSymbol%in% mygenes1)
+                anno_y$Feeding <- factor(anno_y$Feeding, levels =c("AL", "CR.spread", "CR.day.12h", "CR.day.2h",  "CR.night.12h", "CR.night.2h"))
+                
+                
+                anno_o <- lab_xy %>% 
+                            filter(Age == "19mo") %>% 
+                            mutate(lab = paste0(Age, ": " ,Algo_N, " /3"), xlab=40) %>% 
+                            filter(GeneSymbol%in% mygenes1)
+                anno_o$Feeding <- factor(anno_o$Feeding, levels =c("AL", "CR.spread", "CR.day.12h", "CR.day.2h",  "CR.night.12h", "CR.night.2h"))
+                
+                # annotation for DESeq results
+                colnames(dge_res_long)[5] <- "Feeding" #rename column "Condition" with "Feeding" prior to merge
+                annodge <- full_join(dge_res_long, anno_y[,c("GeneID", "Feeding", "max_y")]) %>% 
+                                    mutate(dgelab = paste0("AgeDE: ", Differentially.expressed), 
+                                           xdgelab=8,
+                                           max_y = replace_na(max_y, Inf)) %>% 
+                                    filter(GeneSymbol%in% mygenes1)
+                
+                
+            # create pdf with plots
+              
+              pdf(paste0(plot.wd, "/",  my_pdf_filename), height = 8, width = 12)
+              for (i in seq_len(n_pages)) {
+                my_plot <-  ggplot(gathered_df, aes(x = Timepoint, y = RPKM)) +
+                              geom_line(aes(y=mean, color = Feeding, linetype = Age), size=0.5)+ #geom_smooth(aes(color = Feeding, linetype=Age, y=mean), method = "loess", span = 0.2 ) + 
+                              #geom_point(aes(color = Feeding, shape=Age), alpha=0.5, size=1.5, position=position_jitter(w=0.2,h=0)) +  #repA&B
+                              #geom_point(aes(color = Feeding, shape=Age, y=mean), alpha=1, size=2, position=position_jitter(w=0.2,h=0)) +  #mean
+                              xlab("Timepoint") +
+                              ylab("RPKM") + 
+                              
+                              geom_text(data = anno_y, aes(x=xlab, y= max_y, label = lab), size =2, vjust = "top") + #  YOUNG 6mo= add label with N_algorithms with q-val < 0.05
+                              geom_text(data = anno_o, aes(x=xlab, y= max_y, label = lab), size =2, vjust = "top") + #  AGED 19mo= add label with N_algorithms with q-val < 0.05
+                              geom_text(data = annodge, aes(x=xdgelab, y= max_y, label = dgelab), size =2, vjust = "top") + #  AgingDGE results
+                              
+                              labs(title = paste0(my_pdf_filename)) + 
+                              facet_grid_paginate(GeneSymbol~Feeding, scales = "free_y", page = i, ncol = 6, nrow = 6) +
+                              scale_color_manual(values=rep(mylevels_col)) +
+                              scale_x_continuous(breaks= seq(0, 48, 4), labels=c(0, rep("", 2), 
+                                                                                  12, rep("", 2), 
+                                                                                  24, rep("", 2),
+                                                                                  36, rep("", 2),
+                                                                                 48), 
+                                                 limits=c(0, 48) ) +
+                              theme_bw() +
+                              theme(axis.text.x = element_text(angle = 0, hjust = 0.5),
+                                    plot.title = element_text(hjust = 0.5, size=15),
+                                    strip.text = element_text(size = 10)) 
+                print(my_plot)
+              }
+              dev.off()
+              
+             
+          
+   
+
+```
+
+   
