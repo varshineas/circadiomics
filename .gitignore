@@ -5,6 +5,4 @@
 
 rsconnect/
 
-Data/*.rds
-Data/*.tsv
-Data/*.csv
+Data/*
